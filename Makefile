@@ -1,3 +1,3 @@
 stencil: stencil.c
-	gcc -std=c99 -Wall $^ -o $@
+	gcc -Ofast -pg -std=c99 -fopenmp-simd -Wall $^ -o $@
 
