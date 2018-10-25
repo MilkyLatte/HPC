@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
@@ -6,19 +5,19 @@
 // Define output file name
 #define OUTPUT_FILE "stencil.pgm"
 
-void stencil(const int nx, const int ny, float * restrict image, float * restrict  tmp_image);
-void init_image(const int nx, const int ny, float * restrict image, float * restrict  tmp_image);
-void output_image(const char * file_name, const int nx, const int ny, float * restrict image);
+void stencil(const int nx, const int ny, float * restrict  image, float *  tmp_image);
+void init_image(const int nx, const int ny, float * restrict image, float *  tmp_image);
+void output_image(const char * file_name, const int nx, const int ny, float *  image);
 double wtime(void);
 
 int main(int argc, char *argv[]) {
-
 
   // Check usage
   if (argc != 4) {
     fprintf(stderr, "Usage: %s nx ny niters\n", argv[0]);
     exit(EXIT_FAILURE);
   }
+
 
   // Initiliase problem dimensions from command line arguments
   int nx = atoi(argv[1]);
@@ -34,7 +33,7 @@ int main(int argc, char *argv[]) {
 
   // Call the stencil kernel
   double tic = wtime();
-
+// #pragma omp simd
   for (int t = 0; t < niters; ++t) {
     stencil(nx, ny, image, tmp_image);
     stencil(nx, ny, tmp_image, image);
@@ -51,7 +50,7 @@ int main(int argc, char *argv[]) {
   free(image);
 }
 
-void stencil(const int nx, const int ny, float * restrict image, float * restrict tmp_image) {
+void stencil(const int nx, const int ny, float * restrict image, float * tmp_image) {
    float x = 0.6f;
    float y = 0.1f;  
 for (int i = 1; i < nx-1; ++i) {
@@ -66,30 +65,33 @@ for (int i = 1; i < nx-1; ++i) {
 // when i = 0; 
  for (int j = 1; j < ny-1; ++j) {
     tmp_image[j] = image[j] * x;
-    tmp_image[j]  += image[j + nx] * y;
-    tmp_image[j]  += image[j-1] * y;
-    tmp_image[j]  += image[j+1] * y; 
- }
+    tmp_image[j] += image[j + nx] * y;
+    tmp_image[j] += image[j-1] * y;
+    tmp_image[j] += image[j+1] * y; 
+  }
 // when i == nx - 1
  for (int j = 1; j < ny-1; ++j) {
-    tmp_image[j+(nx-1)*ny] = image[j+(nx-1)*ny] * x;
-    tmp_image[j+(nx-1)*ny] += image[j +(nx-2)*ny] * y;
-    tmp_image[j+(nx-1)*ny] += image[j-1+(nx-1)*ny] * y;
-    tmp_image[j+(nx-1)*ny] += image[j+1+(nx-1)*ny] * y;
+    float variable = image[j+(nx-1)*ny] * x;
+    variable += image[j +(nx-2)*ny] * y;
+    variable += image[j-1+(nx-1)*ny] * y;
+    variable += image[j+1+(nx-1)*ny] * y;
+    tmp_image[j+(nx-1)*ny] = variable;
 } 
 // when j == 0
  for (int i = 1; i < nx-1; ++i){
-   tmp_image[i*ny] = image[i*ny] * x;
-   tmp_image[i*ny] += image[(i-1)*ny] * y;
-   tmp_image[i*ny] += image[(i+1)*ny] * y;
-   tmp_image[i*ny] += image[1+i*ny] * y;
+   float variable = image[i*ny] * x;
+   variable += image[(i-1)*ny] * y;
+   variable += image[(i+1)*ny] * y;
+   variable += image[1+i*ny] * y;
+   tmp_image[i*ny] = variable;
 }
 // when j == nx -1
   for (int i = 1; i < nx-1; ++i) {
-    tmp_image[(ny-1)+i*ny] = image[(ny-1)+i*ny]*x;
-    tmp_image[(ny-1)+i*ny] += image[(ny-1)+(i-1)*ny] * y;
-    tmp_image[(ny-1)+i*ny] += image[(ny-1)+(i+1)*ny] * y;
-    tmp_image[(ny-1)+i*ny] += image[(ny-1)-1+i*ny] * y;
+    float variable = image[(ny-1)+i*ny]*x;
+    variable += image[(ny-1)+(i-1)*ny] * y;
+    variable += image[(ny-1)+(i+1)*ny] * y;
+    variable += image[(ny-1)-1+i*ny] * y;
+    tmp_image[(ny-1)+i*ny] = variable;
 }
     float leftBot = image[0] * x;
     leftBot += image[ny] * x;
@@ -108,34 +110,35 @@ for (int i = 1; i < nx-1; ++i) {
     rightTop += image[((ny-1) - 1) + (nx-1) * ny] * y; 
     tmp_image[(ny-1)+(nx-1) * ny] = rightTop;
 
-    }
+}
 
 // Create the input image
-void init_image(const int nx, const int ny, float * restrict image, float * restrict tmp_image) {
-  // Zero everything
-  for (int i = 0; i < ny; ++i) {
-    for (int j = 0; j < nx; ++j) {
-      image[j+i*ny] = 0.0f;
-      tmp_image[j+i*ny] = 0.0f;
+void init_image(const int nx, const int ny, float * restrict image, float * tmp_image) {
+  
+// Zero everything
+  float zero = 0.0f;
+  for (int j = 0; j < ny; ++j) {
+    for (int i = 0; i < nx; ++i) {
+      image[j+i*ny] = zero;
+      tmp_image[j+i*ny] = zero;
     }
   }
+  float val = 100.0f;
   // Checkerboard
-  for (int i = 0; i < 8; ++i) {
-    for (int j = 0; j < 8; ++j) {
-      for (int jj = j*ny*0.125f; jj < (j+1)*ny*0.125f; ++jj) {
-        for (int ii = i*nx*0.125f; ii < (i+1)*nx*0.125f; ++ii) {
+  for (int j = 0; j < 8; ++j) {
+    for (int i = 0; i < 8; ++i) {
+      for (int jj = j*ny/8; jj < (j+1)*ny/8; ++jj) {
+        for (int ii = i*nx/8; ii < (i+1)*nx/8; ++ii) {
           if ((i+j)%2)
-          
-	image[jj+ii*ny] = 100.0f;
+          image[jj+ii*ny] = val;
         }
       }
     }
   }
 }
 
-
 // Routine to output the image in Netpbm grayscale binary image format
-void output_image(const char * file_name, const int nx, const int ny, float * restrict image) {
+void output_image(const char * file_name, const int nx, const int ny, float * image) {
 
   // Open output file
   FILE *fp = fopen(file_name, "w");
@@ -151,18 +154,17 @@ void output_image(const char * file_name, const int nx, const int ny, float * re
   // This is used to rescale the values
   // to a range of 0-255 for output
   float maximum = 0.0f;
-
-  for (int i = 0; i < ny; ++i) {
-    for (int j = 0; j < nx; ++j) {
+  for (int j = 0; j < ny; ++j) {
+    for (int i = 0; i < nx; ++i) {
       if (image[j+i*ny] > maximum)
         maximum = image[j+i*ny];
     }
   }
-
+ float val = 255.0f;
   // Output image, converting to numbers 0-255
-  for (int i = 0; i < ny; ++i) {
-    for (int j = 0; j < nx; ++j) {
-      fputc((char)(255.0f*image[j+i*ny]/maximum), fp);
+  for (int j = 0; j < ny; ++j) {
+    for (int i = 0; i < nx; ++i) {
+      fputc((char)(val*image[j+i*ny]/maximum), fp);
     }
   }
 
