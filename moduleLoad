@@ -1,0 +1,5 @@
+#! /bin/bash
+# Module Load
+
+module load languages/intel-compiler-14
+module load module load languages/python-2.7.6
